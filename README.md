@@ -1,5 +1,81 @@
 # BLINDSPOT
 
+## Changelog — stay a picker, scale the catch
+
+Added the two things from the strategy pass: a sniping handoff, and three
+higher-$ "scale" niches alongside the original boutique ones.
+
+**Sniping handoff.** eBay closed `PlaceOffer` to new applicants and gated its
+REST replacement (the Offer API) to approved partners only — same wall as
+sold comps. Rather than build toward that wall, Blindspot now hands off
+*execution* to an existing sniping service instead of reinventing it. Each
+card that has comps shows a **ceiling bid** — the max price that still clears
+your margin bar, back-solved from the comp median (`maxJustifiedBid` in
+`scoring.js`) — and a "Snipe up to $X" button that copies the item # + ceiling
+bid to your clipboard and opens Gixen (free, bids in the last few seconds via
+your own eBay authorization — no API access needed on our end). Honest
+caveat: Gixen doesn't publish a documented URL scheme for pre-filling their
+add-snipe form, so this is copy-then-paste, not a deep link — if you want a
+true one-click handoff, that needs checking Gixen's actual form directly
+(or their Mirror-tier CSV import, once you've seen its real column format).
+The feed toolbar also has "Export snipe list" — a CSV of every visible priced
+deal with its ceiling bid, ready for any sniper's bulk-import.
+
+**Scale-tier presets.** The original six categories (now labeled
+"Boutique — high asymmetry, low volume") are real but capped: a handful of
+catches a week, bounded by how many items one person can personally
+receive/list/ship around a day job. Added three "Scale — fewer pickers,
+higher $ per catch" niches where you need far fewer catches to matter:
+Enterprise IT/Networking (decommissioned Cisco/Juniper/NetApp gear — "untested,
+pulled from datacenter" is refresh-cycle boilerplate, not a defect signal),
+Pro Audio with a Reverb cross-list angle (source on eBay against eBay comps,
+resell where specialist buyers pay a premium), and Precision Machinist Tools
+(Starrett/Mitutoyo — zero casual-buyer awareness, cheap to ship). Loadout now
+groups presets by tier so the strategy stays visible in the tool itself.
+
+---
+
+
+## Changelog — power-up pass
+
+**Loop 1 — correctness.** Your first live scan surfaced a real bug: every "Nikor"
+darkroom-tank result was scored as an invisible-to-search typo of "Nikkor," but Nikor is
+a real, unrelated brand — the typo generator's letter-deletion happened to land on an
+actual word. Fixed with two layers: a seeded `KNOWN_REAL_WORD_COLLISIONS` list
+(`netlify/functions/_shared/typoguard.mjs`) skips known collisions *before* even
+querying them (saves an API call), and a runtime check (`isLikelyRealTerm`) flags any
+*new* collision automatically — if the same "typo" spelling shows up verbatim across 3+
+unrelated sellers, it's treated as a real term, not an accident, and the typo bonus is
+suppressed (shown on the card as a muted "common term, not a typo" chip instead). Also
+added: a "Typo exclude" field so you can add your own known collisions, and an "Exclude
+keywords in title" field to filter out things like "repro" or "case only."
+
+**Loop 2 — power-user upgrades.** Sort by score/margin/net/ending-soonest/price. A
+"clears my bar" toggle applies your margin threshold as an actual filter instead of just
+ranking. "Get comps for N queries" batches comp-fetching instead of clicking every card.
+Save button (writes to the `deals` table if Supabase is configured — hidden otherwise).
+Dismiss (×) to declutter false positives for the session. A collapsible "Scan breakdown"
+panel shows every query run, hit count, and which ones got flagged as common terms — so
+you can catch the next Nikor yourself. API budget gauge tracks calls against eBay's
+5,000/day default. Your loadout now persists across reloads. Press "S" anywhere to scan.
+
+**Loop 3 — mobile.** The loadout rail is now a collapsible drawer on phones instead of a
+long form pushing results off-screen — collapses automatically right after a scan so you
+see results immediately. A sticky bottom scan bar stays reachable without scrolling back
+up. All buttons sized to real touch targets (44px+). Narrow-width field stacking, visible
+focus states throughout.
+
+**Note:** if you already ran `supabase-schema.sql`, the `deals` table now needs a unique
+constraint for the Save button to work:
+```sql
+alter table deals add constraint deals_item_id_unique unique (item_id);
+```
+If you haven't set up Supabase yet, no action needed — the updated schema file already
+has it, and the Save button just won't appear until Supabase is configured.
+
+---
+
+
 eBay mispricing scanner. Official Browse API for active listings, signal-stack scoring
 (zero-bid auctions ending soon, typo-hunted brand misspellings, inexperienced sellers,
 fixable "for parts" gear), and margin math against sold comps — net of fees and shipping.

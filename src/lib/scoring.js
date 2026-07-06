@@ -9,6 +9,13 @@ export const DEFAULT_ECON = {
 
 const CONDITION_FOR_PARTS = '7000'
 
+// Typo variants that turn out to be real, independently-used words or brand
+// names rather than accidents. Collapsing a double letter is the single most
+// common way this happens ("Nikkor" minus a "k" is "Nikor" — a real, unrelated
+// darkroom-equipment brand, not a misspelling of anything). Seed this with
+// confirmed collisions; add your own via the "Typo exclude" field in the UI.
+export const KNOWN_REAL_WORD_COLLISIONS = ['nikor', 'anon']
+
 // ── Typo hunting ────────────────────────────────────────────────────
 // Misspelled brand names get near-zero search visibility → fewer bidders.
 // Generate deletion / adjacent-transposition / double-letter-collapse variants.
@@ -49,11 +56,16 @@ export function detectSignals(item, ctx = {}) {
   }
 
   if (ctx.typoOrigin) {
-    signals.push({ code: 'TYPO_HIT', label: `typo: "${ctx.typoOrigin}"`, pts: 18 })
-    const correct = (ctx.correctBrand || '').toLowerCase()
-    if (correct && !title.toLowerCase().includes(correct)) {
-      // title never spells the brand right anywhere → truly invisible to searchers
-      signals.push({ code: 'TYPO_INVISIBLE', label: 'brand never spelled right', pts: 6 })
+    if (ctx.commonTerm) {
+      // Looks like a real term rather than a one-off typo — see isLikelyRealTerm.
+      // Zero points: informational, so the card doesn't read as a dead find.
+      signals.push({ code: 'COMMON_TERM', label: 'common term, not a typo', pts: 0 })
+    } else {
+      signals.push({ code: 'TYPO_HIT', label: `typo: "${ctx.typoOrigin}"`, pts: 18 })
+      const correct = (ctx.correctBrand || '').toLowerCase()
+      if (correct && !title.toLowerCase().includes(correct)) {
+        signals.push({ code: 'TYPO_INVISIBLE', label: 'brand never spelled right', pts: 6 })
+      }
     }
   }
 
@@ -106,21 +118,30 @@ export function scoreItem(item, ctx = {}) {
 
   let marginPts = 0
   if (margin) {
-    // margin dominates when comps exist: 30% margin ≈ 26pts, 100%+ ≈ 55pts
     marginPts = Math.max(0, Math.min(55, margin.marginPct * 0.55))
-    if (margin.estNet < 0) marginPts = -20 // underwater after fees — punish hard
+    if (margin.estNet < 0) marginPts = -20
   }
 
   const score = Math.max(0, Math.min(100, Math.round(signalPts + marginPts)))
-  const confidence = margin
-    ? (ctx.compN >= 5 ? 'HIGH' : 'MED')
-    : 'LOW'
+  const confidence = margin ? (ctx.compN >= 5 ? 'HIGH' : 'MED') : 'LOW'
 
   return { score, signals, margin, confidence }
 }
 
 // Does this deal clear the user's bar?
 export function clearsThreshold(scored, { minMarginPct = 30, minNetUsd = 25 } = {}) {
-  if (!scored.margin) return scored.score >= 45 // signal-only finds need a strong stack
+  if (!scored.margin) return scored.score >= 45
   return scored.margin.marginPct >= minMarginPct || scored.margin.estNet >= minNetUsd
+}
+
+// The ceiling bid for a snipe: the highest price that still clears EITHER bar
+// (mirrors clearsThreshold's OR logic — one satisfied constraint is enough).
+// This is the number you actually need before setting a max bid in a sniper.
+export function maxJustifiedBid(compMedian, econ = DEFAULT_ECON, { minMarginPct = 30, minNetUsd = 25 } = {}) {
+  if (!compMedian || compMedian <= 0) return null
+  const gross = compMedian * (1 - econ.feeRate) - econ.perOrderFee
+  const fromNet = gross - econ.shipEstimate - minNetUsd
+  const fromMargin = (gross - econ.shipEstimate) / (1 + minMarginPct / 100)
+  const maxBid = Math.max(fromNet, fromMargin)
+  return maxBid > 0 ? Math.round(maxBid * 100) / 100 : 0
 }

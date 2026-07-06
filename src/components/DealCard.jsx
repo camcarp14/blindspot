@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import Reticle from './Reticle.jsx'
+import { maxJustifiedBid } from '../lib/scoring.js'
 
 function useCountdown(endDate) {
   const [now, setNow] = useState(Date.now())
@@ -19,15 +20,49 @@ function useCountdown(endDate) {
     : `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
 }
 
-export default function DealCard({ deal, rank, onGetComps, onManualComp, compsBusy }) {
+export default function DealCard({
+  deal,
+  rank,
+  onGetComps,
+  onManualComp,
+  compsBusy,
+  onDismiss,
+  onSave,
+  saved,
+  dealsConfigured,
+  econ,
+  minMarginPct,
+  minNetUsd,
+}) {
   const countdown = useCountdown(deal.endDate)
   const [manualVal, setManualVal] = useState('')
   const [showManual, setShowManual] = useState(false)
+  const [snipeCopied, setSnipeCopied] = useState(false)
   const urgent = countdown && countdown !== 'ENDED' && new Date(deal.endDate) - Date.now() < 6 * 36e5
   const m = deal.margin
+  const maxBid = m ? maxJustifiedBid(m.compMedian, econ, { minMarginPct, minNetUsd }) : null
+
+  const snipeIt = () => {
+    const text = maxBid != null
+      ? `eBay item #${deal.itemId} — max bid $${maxBid} — ${deal.title}`
+      : `eBay item #${deal.itemId} — ${deal.title}`
+    navigator.clipboard?.writeText(text).catch(() => {})
+    setSnipeCopied(true)
+    setTimeout(() => setSnipeCopied(false), 2000)
+    window.open('https://www.gixen.com/main/index.php', '_blank', 'noopener')
+  }
 
   return (
     <article className={`card ${deal.score >= 70 ? 'card-hot' : ''}`}>
+      <button
+        className="card-dismiss"
+        onClick={() => onDismiss(deal.itemId)}
+        aria-label="Dismiss this listing"
+        title="Dismiss"
+      >
+        ×
+      </button>
+
       <div className="card-rank" aria-hidden="true">{String(rank).padStart(2, '0')}</div>
       <Reticle score={deal.score} />
 
@@ -51,23 +86,23 @@ export default function DealCard({ deal, rank, onGetComps, onManualComp, compsBu
 
         <div className="card-signals">
           {deal.signals.map((s) => (
-            <span key={s.code} className="chip">{s.label}</span>
+            <span key={s.code} className={`chip ${s.code === 'COMMON_TERM' ? 'chip-muted' : ''}`}>
+              {s.label}
+            </span>
           ))}
         </div>
 
         {m ? (
           <div className={`margin ${m.estNet <= 0 ? 'margin-under' : ''}`}>
-            comp ${m.compMedian} → est net{' '}
-            <strong>${m.estNet}</strong> ({m.marginPct}%)
+            comp ${m.compMedian} → est net <strong>${m.estNet}</strong> ({m.marginPct}%)
             {m.estNet <= 0 && ' — underwater after fees'}
+            {maxBid != null && maxBid > 0 && (
+              <span className="max-bid"> · ceiling to bid: ${maxBid}</span>
+            )}
           </div>
         ) : (
           <div className="comp-actions">
-            <button
-              className="btn-ghost"
-              disabled={compsBusy}
-              onClick={() => onGetComps(deal)}
-            >
+            <button className="btn-ghost" disabled={compsBusy} onClick={() => onGetComps(deal)}>
               {compsBusy ? 'pulling comps…' : 'Get comps'}
             </button>
             <button className="btn-ghost" onClick={() => setShowManual((v) => !v)}>
@@ -96,6 +131,21 @@ export default function DealCard({ deal, rank, onGetComps, onManualComp, compsBu
             )}
           </div>
         )}
+
+        <div className="card-actions">
+          <button className="btn-ghost" onClick={snipeIt} title="Copies item # and max bid, opens Gixen to paste in">
+            {snipeCopied ? 'Copied — opening Gixen…' : maxBid != null ? `Snipe up to $${maxBid}` : 'Copy item # for sniper'}
+          </button>
+          {dealsConfigured && (
+            <button
+              className={`btn-ghost ${saved ? 'btn-ghost-active' : ''}`}
+              onClick={() => !saved && onSave(deal)}
+              disabled={saved}
+            >
+              {saved ? 'Saved ✓' : 'Save'}
+            </button>
+          )}
+        </div>
       </div>
 
       {deal.image && <img className="card-thumb" src={deal.image} alt="" loading="lazy" />}

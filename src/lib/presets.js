@@ -1,4 +1,12 @@
 // Hunting grounds. Each preset encodes where mispricing lives in that category.
+//
+// tier: 'boutique' = high asymmetry, low daily volume — a handful of real
+//   catches a week, capped by how many items one person can personally
+//   receive/list/ship. Good for margin %, bad for scale.
+// tier: 'scale' = fewer competing pickers (more domain knowledge required to
+//   evaluate), much higher $ per catch — you need to catch far fewer items
+//   to matter. This is where "stay a picker, scale the catch" actually lives.
+//
 // categoryIds are left empty on purpose — resolve exact IDs with the built-in
 // taxonomy lookup and pin them here once verified (IDs occasionally shift).
 
@@ -6,6 +14,7 @@ export const PRESETS = [
   {
     id: 'lenses',
     label: 'Camera Lenses',
+    tier: 'boutique',
     blurb: 'Best asymmetry-to-liquidity ratio on eBay. Sellers list "old Canon lens" without knowing FD L glass from a kit lens.',
     queries: ['canon fd 50mm 1.2', 'takumar 50mm 1.4', 'nikkor ai-s 105mm', 'minolta rokkor 58mm', 'olympus zuiko 100mm f2'],
     typoBrands: ['takumar', 'voigtlander', 'summicron', 'nikkor', 'rokkor'],
@@ -19,6 +28,7 @@ export const PRESETS = [
   {
     id: 'vintage-computing',
     label: 'Vintage Computing',
+    tier: 'boutique',
     blurb: 'Estate sellers have no idea. Model M keyboards, HP calculators, retro Apple.',
     queries: ['ibm model m keyboard', 'hp 15c calculator', 'hp 41cx', 'apple macintosh se', 'commodore 64 lot'],
     typoBrands: ['commodore', 'macintosh', 'northgate'],
@@ -32,6 +42,7 @@ export const PRESETS = [
   {
     id: 'hifi-parts',
     label: 'Hi-Fi · For Parts',
+    tier: 'boutique',
     blurb: '"Won\'t power on" on vintage Marantz/Sansui is often a fuse or recap. Sellers can\'t test, so they price at scrap.',
     queries: ['marantz receiver', 'sansui receiver', 'pioneer sx receiver', 'technics turntable', 'mcintosh amplifier'],
     typoBrands: ['marantz', 'sansui', 'mcintosh', 'technics'],
@@ -45,6 +56,7 @@ export const PRESETS = [
   {
     id: 'test-equipment',
     label: 'Test Equipment',
+    tier: 'boutique',
     blurb: 'Engineer estates. Tektronix/Keysight scopes with huge knowledge asymmetry. Slower resale velocity — price that in.',
     queries: ['tektronix oscilloscope', 'keysight signal generator', 'fluke multimeter lot', 'hp agilent analyzer'],
     typoBrands: ['tektronix', 'keysight', 'agilent'],
@@ -58,6 +70,7 @@ export const PRESETS = [
   {
     id: 'retro-gaming',
     label: 'Retro Gaming · Repair',
+    tier: 'boutique',
     blurb: 'HDMI port and stick-drift fixes. Trade bench time for margin. Skip anything activation-locked.',
     queries: ['nintendo switch for parts', 'ps5 hdmi for parts', 'gamecube console lot', 'game boy advance sp'],
     typoBrands: ['nintendo', 'gamecube'],
@@ -71,6 +84,7 @@ export const PRESETS = [
   {
     id: 'open-hunt',
     label: 'Open Hunt',
+    tier: 'boutique',
     blurb: 'The wider net: pro tools, dead mechanical watches, retired sealed LEGO.',
     queries: ['snap on tool lot', 'mechanical watch not running lot', 'lego sealed retired set', 'vintage estate electronics lot'],
     typoBrands: ['milwaukee', 'seamaster'],
@@ -80,5 +94,47 @@ export const PRESETS = [
     expectModelNumbers: false,
     shipEstimate: 20,
     maxPrice: 500,
+  },
+  {
+    id: 'it-hardware',
+    label: 'Enterprise IT / Networking',
+    tier: 'scale',
+    blurb: 'IT-refresh cycles dump gear labeled "server" or "network box" with no model number. "Untested, pulled from datacenter" is refresh-cycle boilerplate, not a red flag — usually just decommissioned, not broken.',
+    queries: ['cisco catalyst switch', 'cisco nexus switch', 'juniper ex switch', 'dell poweredge server', 'netapp storage array'],
+    typoBrands: ['cisco', 'juniper', 'netapp', 'ubiquiti'],
+    conditionIds: [],
+    auctionOnly: true,
+    fixable: true,
+    expectModelNumbers: true,
+    shipEstimate: 30,
+    maxPrice: 800,
+  },
+  {
+    id: 'pro-audio',
+    label: 'Pro Audio · Reverb Flip',
+    tier: 'scale',
+    blurb: 'eBay sellers price against eBay comps. Reverb buyers pay specialist premiums for the same gear — source here, comp against Reverb sold listings, resell there.',
+    queries: ['neumann microphone', 'api preamp', 'ssl channel strip', 'universal audio interface', 'shure sm7b lot'],
+    typoBrands: ['neumann', 'focusrite'],
+    conditionIds: [],
+    auctionOnly: true,
+    fixable: true,
+    expectModelNumbers: true,
+    shipEstimate: 20,
+    maxPrice: 600,
+  },
+  {
+    id: 'machinist-tools',
+    label: 'Precision Machinist Tools',
+    tier: 'scale',
+    blurb: 'Estate sellers see "old measuring tools." A machinist sees a $400 Starrett set. Zero casual-buyer awareness, small and cheap to ship.',
+    queries: ['starrett micrometer set', 'mitutoyo caliper', 'brown sharpe indicator', 'starrett dial indicator'],
+    typoBrands: ['starrett', 'mitutoyo'],
+    conditionIds: [],
+    auctionOnly: true,
+    fixable: false,
+    expectModelNumbers: true,
+    shipEstimate: 10,
+    maxPrice: 300,
   },
 ]
