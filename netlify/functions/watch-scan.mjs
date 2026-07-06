@@ -2,7 +2,8 @@
 // score results, alert Discord on NEW items that clear threshold.
 // No-ops gracefully if Supabase isn't configured.
 
-import { browseSearch, sb, envEcon } from './_shared/ebay.mjs'
+import { browseSearch, sb } from './_shared/ebay.mjs'
+import { isKnownCollision, isLikelyRealTerm } from './_shared/typoguard.mjs'
 import { scoreItem, typoVariants, clearsThreshold, DEFAULT_ECON } from '../../src/lib/scoring.js'
 
 export default async () => {
@@ -20,11 +21,13 @@ export default async () => {
 
   for (const w of watches) {
     const cfg = w.config || {}
-    const econ = { ...DEFAULT_ECON, ...envEcon(), ...(cfg.econ || {}) }
+    const econ = { ...DEFAULT_ECON, ...(cfg.econ || {}) }
+    const typoExclude = cfg.typoExclude || []
     const plan = (cfg.queries || []).map((q) => ({ q, typoOrigin: null, correctBrand: null }))
     if (cfg.typoHunt) {
       for (const brand of cfg.typoBrands || []) {
         for (const v of typoVariants(brand).slice(0, 4)) {
+          if (isKnownCollision(v, typoExclude)) continue
           plan.push({ q: v, typoOrigin: v, correctBrand: brand })
         }
       }
@@ -43,10 +46,12 @@ export default async () => {
           limit: 25,
           sort: cfg.auctionOnly ? 'endingSoonest' : 'newlyListed',
         })
+        const commonTerm = step.typoOrigin ? isLikelyRealTerm(step.typoOrigin, items) : false
         for (const item of items) {
           const scored = scoreItem(item, {
             typoOrigin: step.typoOrigin,
             correctBrand: step.correctBrand,
+            commonTerm,
             fixable: !!cfg.fixable,
             expectModelNumbers: cfg.expectModelNumbers !== false,
             compMedian: cfg.comps?.[step.q]?.median || null,
@@ -64,7 +69,6 @@ export default async () => {
 
     if (!hits.length) continue
 
-    // Dedupe against previously seen items
     const ids = hits.map((h) => `"${h.item.itemId}"`).join(',')
     const seenRows = await supa.select('seen_items', `item_id=in.(${ids})&select=item_id`)
     const seenSet = new Set((seenRows || []).map((r) => r.item_id))

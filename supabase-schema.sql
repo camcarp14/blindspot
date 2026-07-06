@@ -28,7 +28,7 @@ create table if not exists comps_cache (
 
 create table if not exists deals (
   id uuid primary key default gen_random_uuid(),
-  item_id text not null,
+  item_id text not null unique, -- unique so "Save" in the UI can upsert instead of duplicate
   title text,
   url text,
   buy_price numeric,

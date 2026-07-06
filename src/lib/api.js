@@ -13,4 +13,6 @@ export const api = {
   scan: (cfg) => post('/api/scan', cfg),
   comps: (keywords, categoryId) => post('/api/comps', { keywords, categoryId }),
   taxonomy: (q) => fetch(`/api/taxonomy?q=${encodeURIComponent(q)}`).then((r) => r.json()),
+  dealsStatus: () => fetch('/api/deals').then((r) => r.json()),
+  saveDeal: (deal) => post('/api/deals', deal),
 }

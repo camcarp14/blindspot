@@ -1,4 +1,5 @@
-import { browseSearch, envEcon } from './_shared/ebay.mjs'
+import { browseSearch } from './_shared/ebay.mjs'
+import { isKnownCollision, isLikelyRealTerm } from './_shared/typoguard.mjs'
 import { scoreItem, typoVariants, DEFAULT_ECON } from '../../src/lib/scoring.js'
 
 const json = (body, status = 200) =>
@@ -8,16 +9,12 @@ const json = (body, status = 200) =>
   })
 
 export default async (req) => {
-  // GET = health check (verifies eBay creds/token work).
-  // Also returns server-side econ (env fee overrides) so the client scores
-  // with the exact same numbers the functions use.
   if (req.method === 'GET') {
-    const econ = { ...DEFAULT_ECON, ...envEcon() }
     try {
       await browseSearch({ q: 'test', limit: 1 })
-      return json({ ok: true, econ })
+      return json({ ok: true })
     } catch (e) {
-      return json({ ok: false, error: String(e.message), econ }, 200)
+      return json({ ok: false, error: String(e.message) }, 200)
     }
   }
   if (req.method !== 'POST') return json({ error: 'POST only' }, 405)
@@ -33,6 +30,8 @@ export default async (req) => {
     queries = [],
     typoBrands = [],
     typoHunt = false,
+    typoExclude = [],
+    excludeKeywords = [],
     categoryIds = [],
     conditionIds = [],
     auctionOnly = false,
@@ -42,25 +41,31 @@ export default async (req) => {
     limitPerQuery = 50,
     fixable = false,
     expectModelNumbers = true,
-    comps = {}, // { [queryKey]: { median, n } } supplied by client from comps calls / manual entry
+    comps = {},
     econ = {},
   } = cfg
 
-  const economics = { ...DEFAULT_ECON, ...envEcon(), ...econ }
+  const economics = { ...DEFAULT_ECON, ...econ }
+  const excludeLower = excludeKeywords.map((k) => k.toLowerCase()).filter(Boolean)
 
-  // Build the search plan: base queries + typo variants (each tagged with origin)
   const plan = []
+  const queryStats = []
+
   for (const q of queries.filter(Boolean)) {
     plan.push({ q, key: q, typoOrigin: null, correctBrand: null })
   }
   if (typoHunt) {
     for (const brand of typoBrands.filter(Boolean)) {
       for (const variant of typoVariants(brand).slice(0, 6)) {
+        if (isKnownCollision(variant, typoExclude)) {
+          queryStats.push({ query: variant, key: `typo:${brand}`, typoOrigin: variant, raw: 0, commonTerm: true, skipped: true })
+          continue
+        }
         plan.push({ q: variant, key: `typo:${brand}`, typoOrigin: variant, correctBrand: brand })
       }
     }
   }
-  if (!plan.length) return json({ error: 'no queries' }, 400)
+  if (!plan.length && !queryStats.length) return json({ error: 'no queries' }, 400)
   if (plan.length > 40) plan.length = 40 // protect the 5k/day API budget
 
   const seen = new Map()
@@ -81,12 +86,27 @@ export default async (req) => {
         sort: auctionOnly ? 'endingSoonest' : 'newlyListed',
       })
       apiCalls++
+
+      const commonTerm = step.typoOrigin ? isLikelyRealTerm(step.typoOrigin, items) : false
+      queryStats.push({
+        query: step.q,
+        key: step.key,
+        typoOrigin: step.typoOrigin,
+        raw: items.length,
+        commonTerm,
+        skipped: false,
+      })
+
       for (const item of items) {
         if (seen.has(item.itemId)) continue
+        const title = item.title || ''
+        if (excludeLower.some((k) => title.toLowerCase().includes(k))) continue
+
         const compEntry = comps[step.key] || comps[step.q] || null
         const scored = scoreItem(item, {
           typoOrigin: step.typoOrigin,
           correctBrand: step.correctBrand,
+          commonTerm,
           fixable,
           expectModelNumbers,
           compMedian: compEntry?.median || null,
@@ -109,24 +129,6 @@ export default async (req) => {
             : null,
           location: item.itemLocation?.postalCode || item.itemLocation?.country || null,
           queryKey: step.key,
-          typoOrigin: step.typoOrigin,
-          correctBrand: step.correctBrand,
-          // Minimal snapshot of the fields scoring.js reads, so the client can
-          // re-score locally (comps entry, econ tweaks) without new API calls.
-          raw: {
-            title: item.title,
-            buyingOptions: item.buyingOptions,
-            bidCount: item.bidCount,
-            itemEndDate: item.itemEndDate,
-            conditionId: item.conditionId,
-            seller: item.seller ? { feedbackScore: item.seller.feedbackScore } : null,
-            shippingOptions: item.shippingOptions
-              ? item.shippingOptions.map((s) => ({ shippingCostType: s.shippingCostType }))
-              : undefined,
-            pickupOptions: item.pickupOptions,
-            currentBidPrice: item.currentBidPrice,
-            price: item.price,
-          },
           ...scored,
         })
       }
@@ -136,5 +138,5 @@ export default async (req) => {
   }
 
   const results = [...seen.values()].sort((a, b) => b.score - a.score).slice(0, 120)
-  return json({ results, apiCalls, errors })
+  return json({ results, apiCalls, errors, queryStats })
 }
