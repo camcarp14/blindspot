@@ -1,22 +1,12 @@
 import { categorySuggestions } from './_shared/ebay.mjs'
+import { requireUser, guarded, json } from './_shared/auth.mjs'
 
-export default async (req) => {
+// Taxonomy API has its own eBay rate bucket (not Browse), so it doesn't touch
+// the ledger — but it's still authenticated, because it's still our keyset.
+export default guarded(async (req) => {
+  await requireUser(req)
   const q = new URL(req.url).searchParams.get('q')
-  if (!q) {
-    return new Response(JSON.stringify({ error: 'q required' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
-  try {
-    const suggestions = await categorySuggestions(q)
-    return new Response(JSON.stringify({ suggestions }), {
-      headers: { 'Content-Type': 'application/json' },
-    })
-  } catch (e) {
-    return new Response(JSON.stringify({ error: String(e.message) }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
-}
+  if (!q) return json({ error: 'q required' }, 400)
+  const suggestions = await categorySuggestions(q)
+  return json({ suggestions })
+})
